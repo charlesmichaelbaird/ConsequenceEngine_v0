@@ -10,8 +10,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from ce.config import load_settings
-from ce.wiki_index import IndexParseError, iter_index_records, search_titles
+from consequence_engine_v0.config import load_settings
+from consequence_engine_v0.wiki_index import IndexParseError, iter_index_records, search_titles
 
 
 def _build_parser() -> argparse.ArgumentParser:

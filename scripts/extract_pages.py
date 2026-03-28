@@ -9,11 +9,11 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from ce.config import load_settings
-from ce.db import connect_db, init_db, upsert_wiki_page
-from ce.scenarios import EARLY_COVID_SEED_TITLES
-from ce.wiki_extract import extract_pages_sequential
-from ce.wiki_index import find_titles_exact
+from consequence_engine_v0.config import load_settings
+from consequence_engine_v0.db import connect_db, init_db, upsert_wiki_page
+from consequence_engine_v0.scenarios import EARLY_COVID_SEED_TITLES
+from consequence_engine_v0.wiki_extract import extract_pages_sequential
+from consequence_engine_v0.wiki_index import find_titles_exact
 
 
 def _build_parser() -> argparse.ArgumentParser:

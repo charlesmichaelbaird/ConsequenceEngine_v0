@@ -16,14 +16,16 @@ def _expand(path_value: str) -> Path:
     return Path(os.path.expandvars(os.path.expanduser(path_value))).resolve()
 
 
+def _default_index_path() -> str:
+    fixture = Path("data/fixtures/enwiki-20260301-pages-articles-multistream-index.txt")
+    if fixture.exists():
+        return str(fixture)
+    return "local_data/enwiki-latest-pages-articles-multistream-index.txt"
+
+
 def load_settings() -> Settings:
     """Load file locations from environment with practical local defaults."""
-    wiki_index_path = _expand(
-        os.getenv(
-            "CE_WIKI_INDEX_PATH",
-            "local_data/enwiki-latest-pages-articles-multistream-index.txt",
-        )
-    )
+    wiki_index_path = _expand(os.getenv("CE_WIKI_INDEX_PATH", _default_index_path()))
     wiki_dump_path = _expand(
         os.getenv(
             "CE_WIKI_DUMP_PATH",

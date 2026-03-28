@@ -62,7 +62,7 @@ $env:CE_DB_PATH         = "C:\path\to\output\ce_v0.sqlite"
 ```
 
 If unset, defaults are:
-- `local_data/enwiki-latest-pages-articles-multistream-index.txt`
+- `data/fixtures/enwiki-20260301-pages-articles-multistream-index.txt` (if present) or `local_data/enwiki-latest-pages-articles-multistream-index.txt`
 - `local_data/enwiki-latest-pages-articles-multistream.xml.bz2`
 - `output/ce_v0.sqlite`
 

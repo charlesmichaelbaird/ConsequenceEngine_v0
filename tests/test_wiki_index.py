@@ -9,7 +9,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from ce.wiki_index import IndexParseError, parse_index_line, search_titles
+from consequence_engine_v0.wiki_index import IndexParseError, parse_index_line, search_titles
 
 
 FIXTURE_INDEX = Path("data/fixtures/sample_index.txt")

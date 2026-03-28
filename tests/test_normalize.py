@@ -10,7 +10,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from ce.normalize import normalize_text
+from consequence_engine_v0.normalize import normalize_text
 
 
 class NormalizeTests(unittest.TestCase):
