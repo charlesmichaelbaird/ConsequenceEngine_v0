@@ -53,7 +53,7 @@ tests/
 
 Large corpora stay local and out of git (for example under `local_data/`).
 
-Copy `.env.example` values into your environment (PowerShell example):
+Copy `.env.example` values into your environment (PowerShell example, Windows):
 
 ```powershell
 $env:CE_WIKI_INDEX_PATH = "C:\path\to\enwiki-latest-pages-articles-multistream-index.txt"
@@ -74,37 +74,39 @@ If unset, defaults are:
 
 ### 1) Inspect index quickly
 
-```bash
-PYTHONPATH=src python scripts/inspect_index.py --query covid --limit 10
+PowerShell / PyCharm local terminal on Windows:
+
+```powershell
+python scripts\inspect_index.py --query covid --limit 10
 ```
 
 Or preview first lines (no query):
 
-```bash
-PYTHONPATH=src python scripts/inspect_index.py --limit 10
+```powershell
+python scripts\inspect_index.py --limit 10
 ```
 
 ### 2) Extract a tiny title set into SQLite
 
 Use explicit titles:
 
-```bash
-PYTHONPATH=src python scripts/extract_pages.py \
-  --title "COVID-19 pandemic" \
-  --title "Panic buying" \
+```powershell
+python scripts\extract_pages.py `
+  --title "COVID-19 pandemic" `
+  --title "Panic buying" `
   --title "Remote work"
 ```
 
 Use a titles file (one title per line):
 
-```bash
-PYTHONPATH=src python scripts/extract_pages.py --titles-file data/fixtures/early_covid_seed_titles.txt
+```powershell
+python scripts\extract_pages.py --titles-file data\fixtures\early_covid_seed_titles.txt
 ```
 
 Use built-in seed list for early COVID workflow:
 
-```bash
-PYTHONPATH=src python scripts/extract_pages.py --seed early-covid
+```powershell
+python scripts\extract_pages.py --seed early-covid
 ```
 
 The script will:
@@ -128,8 +130,8 @@ This schema is intentionally simple and expected to evolve.
 
 ## Development checks
 
-```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
+```powershell
+python -m unittest discover -s tests -v
 ```
 
 ---
