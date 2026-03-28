@@ -1,1 +1,1 @@
-from ce.graph_build import *  # noqa: F401,F403
+"""Placeholder for consequence-graph build logic (next increment)."""

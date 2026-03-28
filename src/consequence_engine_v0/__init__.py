@@ -1,3 +1,11 @@
-"""ConsequenceEngine_v0 canonical package namespace."""
+"""ConsequenceEngine_v0 package."""
 
-from ce import *  # noqa: F401,F403
+__all__ = [
+    "config",
+    "db",
+    "models",
+    "normalize",
+    "scenarios",
+    "wiki_extract",
+    "wiki_index",
+]

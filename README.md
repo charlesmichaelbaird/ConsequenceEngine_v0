@@ -14,7 +14,7 @@ This first vertical slice is intentionally narrow:
 - CLI-first scripts (`inspect_index.py`, `extract_pages.py`)
 - Windows-friendly local path configuration via environment variables
 - Minimal multistream index parsing and title search
-- Sequential tiny-subset extraction from compressed dump
+- Sequential tiny-subset extraction from compressed dump with CLI progress updates
 - SQLite table for extracted pages
 - Focus on early COVID scenario seeding
 
@@ -31,7 +31,7 @@ This first vertical slice is intentionally narrow:
 ## Project layout
 
 ```text
-src/ce/
+src/consequence_engine_v0/
   config.py
   db.py
   graph_build.py
@@ -109,11 +109,21 @@ Use built-in seed list for early COVID workflow:
 python scripts\extract_pages.py --seed early-covid
 ```
 
+
+For quick local smoke tests on large dumps, cap the scan window:
+
+```powershell
+python scripts\extract_pages.py --seed early-covid --quick-test
+```
+
+(Equivalent explicit control: `--max-pages-to-scan 20000`.)
+
 The script will:
 1. find exact title matches in index
 2. sequentially scan compressed XML dump and extract those pages
 3. normalize text (whitespace collapse)
 4. upsert into SQLite table `wiki_pages`
+5. print scan progress while reading the dump (disable with `--no-progress`)
 
 ---
 

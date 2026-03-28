@@ -33,6 +33,28 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["early-covid"],
         help="Include scenario seed titles (currently: early-covid)",
     )
+    parser.add_argument(
+        "--max-pages-to-scan",
+        type=int,
+        default=None,
+        help="Stop sequential extraction after scanning this many pages (for quick testing).",
+    )
+    parser.add_argument(
+        "--quick-test",
+        action="store_true",
+        help="Shortcut for fast local iteration: sets --max-pages-to-scan 20000 unless already set.",
+    )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable progress display while scanning dump.",
+    )
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=1000,
+        help="Update progress display every N scanned pages.",
+    )
     return parser
 
 
@@ -68,6 +90,10 @@ def main() -> int:
     dump_path = args.dump or settings.wiki_dump_path
     db_path = args.db or settings.db_path
 
+    max_pages_to_scan = args.max_pages_to_scan
+    if args.quick_test and max_pages_to_scan is None:
+        max_pages_to_scan = 20_000
+
     try:
         titles = _load_titles(args)
         if not titles:
@@ -78,9 +104,18 @@ def main() -> int:
             print("No matching titles found in index; nothing to extract.")
             return 0
 
-        extracted = extract_pages_sequential(dump_path=dump_path, targets=candidate_records)
+        extracted, stats = extract_pages_sequential(
+            dump_path=dump_path,
+            targets=candidate_records,
+            max_pages_to_scan=max_pages_to_scan,
+            show_progress=not args.no_progress,
+            progress_every=args.progress_every,
+        )
         if not extracted:
             print("Index candidates found, but no pages were extracted from dump.")
+            print(f"Scanned pages: {stats.scanned_pages}")
+            if stats.stopped_due_to_limit:
+                print("Stopped early due to --max-pages-to-scan limit.")
             return 0
 
         conn = connect_db(db_path)
@@ -94,7 +129,10 @@ def main() -> int:
         requested = len(titles)
         print(f"Requested titles: {requested}")
         print(f"Index matches: {len(candidate_records)}")
+        print(f"Scanned pages: {stats.scanned_pages}")
         print(f"Extracted + stored: {len(extracted)}")
+        if stats.stopped_due_to_limit:
+            print("WARNING: stopped early due to --max-pages-to-scan limit.")
         print(f"SQLite DB: {db_path}")
         return 0
     except (FileNotFoundError, ValueError) as exc:
