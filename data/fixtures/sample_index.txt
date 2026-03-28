@@ -1,0 +1,3 @@
+123:10:COVID-19 pandemic
+456:11:Panic buying
+789:12:Remote work
