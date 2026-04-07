@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sqlite3
 import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -10,20 +11,37 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from ce.config import RepoPaths
-from ce.wiki import load_index, search_titles
+from ce.wiki import search_title_catalog
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Search Wikipedia multistream titles")
-    parser.add_argument("query", help="Case-insensitive substring query")
+    parser = argparse.ArgumentParser(description="Search compiled Wikipedia title catalog")
+    parser.add_argument("query", help="Search query")
     parser.add_argument("--limit", type=int, default=25, help="Maximum matches to print")
+    parser.add_argument(
+        "--all-namespaces",
+        action="store_true",
+        help="Include all namespaces (default is article namespace only)",
+    )
     args = parser.parse_args()
 
     paths = RepoPaths.from_repo_root()
-    paths.validate_required_inputs()
+    if not paths.sqlite_path.exists():
+        raise FileNotFoundError(
+            f"Missing SQLite cache at {paths.sqlite_path}. Run: python scripts/compile_title_catalog.py"
+        )
 
-    entries = load_index(paths.index_path)
-    matches = search_titles(entries, args.query, limit=args.limit)
+    try:
+        matches = search_title_catalog(
+            paths.sqlite_path,
+            args.query,
+            limit=args.limit,
+            article_only=not args.all_namespaces,
+        )
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError(
+            "title_catalog table not found. Run: python scripts/compile_title_catalog.py"
+        ) from exc
 
     print(f"Found {len(matches)} match(es) for query: {args.query!r}")
     for idx, entry in enumerate(matches, start=1):

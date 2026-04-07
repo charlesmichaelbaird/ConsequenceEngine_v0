@@ -2,14 +2,33 @@ from __future__ import annotations
 
 import bz2
 import re
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator
 
 
 _PAGE_BLOCK_RE = re.compile(r"<page>.*?</page>", re.DOTALL)
 _TITLE_RE = re.compile(r"<title>(.*?)</title>", re.DOTALL)
 _PAGE_ID_RE = re.compile(r"<page>\s*<title>.*?</title>\s*<ns>\d+</ns>\s*<id>(\d+)</id>", re.DOTALL)
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+
+_NAMESPACE_TO_ID = {
+    "talk": 1,
+    "user": 2,
+    "wikipedia": 4,
+    "project": 4,
+    "file": 6,
+    "image": 6,
+    "mediawiki": 8,
+    "template": 10,
+    "help": 12,
+    "category": 14,
+    "portal": 100,
+    "draft": 118,
+    "timedtext": 710,
+    "module": 828,
+}
 
 
 @dataclass(frozen=True)
@@ -27,11 +46,21 @@ class ExtractedPage:
     raw_xml: str
 
 
-def load_index(index_path: Path) -> list[IndexEntry]:
-    """Load the multistream index file into memory."""
-    entries: list[IndexEntry] = []
+def normalize_title(text: str) -> str:
+    cleaned = _NON_ALNUM_RE.sub(" ", text.replace("_", " ").casefold())
+    return " ".join(cleaned.split())
+
+
+def infer_namespace_id(title: str) -> int:
+    if ":" not in title:
+        return 0
+    maybe_ns = title.split(":", 1)[0].strip().casefold()
+    return _NAMESPACE_TO_ID.get(maybe_ns, 0)
+
+
+def iter_index_entries(index_path: Path) -> Iterator[IndexEntry]:
     with index_path.open("r", encoding="utf-8", errors="replace") as f:
-        for line_no, line in enumerate(f, start=1):
+        for line in f:
             raw = line.rstrip("\n")
             if not raw:
                 continue
@@ -44,18 +73,103 @@ def load_index(index_path: Path) -> list[IndexEntry]:
                 continue
             page_id = _safe_int(parts[1])
             title = parts[2]
-            entries.append(IndexEntry(offset=offset, page_id=page_id, title=title))
+            yield IndexEntry(offset=offset, page_id=page_id, title=title)
+
+
+def load_index(index_path: Path) -> list[IndexEntry]:
+    """Load the multistream index file into memory."""
+    entries = list(iter_index_entries(index_path))
     if not entries:
         raise ValueError(f"No valid index entries loaded from {index_path}")
     return entries
 
 
-def search_titles(entries: Iterable[IndexEntry], query: str, limit: int = 50) -> list[IndexEntry]:
-    q = query.casefold().strip()
+def compile_title_catalog(index_path: Path, db_path: Path, batch_size: int = 5000) -> int:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    total = 0
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TABLE IF EXISTS title_catalog")
+        conn.execute(
+            """
+            CREATE TABLE title_catalog (
+                title TEXT NOT NULL,
+                page_id INTEGER,
+                offset INTEGER NOT NULL,
+                namespace INTEGER NOT NULL,
+                normalized_title TEXT NOT NULL
+            )
+            """
+        )
+
+        batch = []
+        for entry in iter_index_entries(index_path):
+            batch.append(
+                (
+                    entry.title,
+                    entry.page_id,
+                    entry.offset,
+                    infer_namespace_id(entry.title),
+                    normalize_title(entry.title),
+                )
+            )
+            if len(batch) >= batch_size:
+                conn.executemany(
+                    "INSERT INTO title_catalog (title, page_id, offset, namespace, normalized_title) VALUES (?, ?, ?, ?, ?)",
+                    batch,
+                )
+                total += len(batch)
+                batch.clear()
+        if batch:
+            conn.executemany(
+                "INSERT INTO title_catalog (title, page_id, offset, namespace, normalized_title) VALUES (?, ?, ?, ?, ?)",
+                batch,
+            )
+            total += len(batch)
+
+        conn.execute("CREATE INDEX idx_title_catalog_norm ON title_catalog(normalized_title)")
+        conn.execute("CREATE INDEX idx_title_catalog_ns ON title_catalog(namespace)")
+        conn.commit()
+    return total
+
+
+def search_title_catalog(
+    db_path: Path,
+    query: str,
+    limit: int = 25,
+    article_only: bool = True,
+) -> list[IndexEntry]:
+    q = normalize_title(query)
     if not q:
         return []
-    matches = [entry for entry in entries if q in entry.title.casefold()]
-    return matches[:limit]
+
+    sql = """
+        SELECT title, page_id, offset
+        FROM title_catalog
+        WHERE normalized_title LIKE ?
+    """
+    params: list[object] = [f"%{q}%"]
+    if article_only:
+        sql += " AND namespace = 0"
+
+    sql += """
+        ORDER BY
+            CASE
+                WHEN normalized_title = ? THEN 0
+                WHEN normalized_title LIKE ? THEN 1
+                WHEN normalized_title LIKE ? THEN 2
+                WHEN normalized_title LIKE ? THEN 3
+                ELSE 4
+            END,
+            length(title) ASC,
+            title ASC
+        LIMIT ?
+    """
+    params.extend([q, f"{q} %", f"% {q} %", f"{q}%", limit])
+
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    return [IndexEntry(title=r[0], page_id=r[1], offset=r[2]) for r in rows]
 
 
 def extract_pages_by_titles(
