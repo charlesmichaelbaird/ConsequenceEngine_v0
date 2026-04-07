@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import os
 import sqlite3
 import sys
+import time
 from pathlib import Path
 
 from .config import TITLE_CATALOG_DB_PATH, WIKI_INDEX_PATH
@@ -19,6 +21,19 @@ def parse_namespace(title: str) -> str:
     return title.split(":", 1)[0].strip().lower() or "main"
 
 
+def parse_index_line(line: str):
+    parts = line.split(":", 2)
+    if len(parts) != 3:
+        return None
+    offset_raw, page_id_raw, title = parts
+    try:
+        offset = int(offset_raw)
+        page_id = int(page_id_raw)
+    except ValueError:
+        return None
+    return title, page_id, offset, parse_namespace(title), normalize_title(title)
+
+
 def iter_index_rows(index_path: Path):
     with index_path.open("rb") as handle:
         while True:
@@ -29,16 +44,7 @@ def iter_index_rows(index_path: Path):
             line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
             if not line:
                 continue
-            parts = line.split(":", 2)
-            if len(parts) != 3:
-                continue
-            offset_raw, page_id_raw, title = parts
-            try:
-                offset = int(offset_raw)
-                page_id = int(page_id_raw)
-            except ValueError:
-                continue
-            yield position, (title, page_id, offset, parse_namespace(title), normalize_title(title))
+            yield position, parse_index_line(line)
 
 
 def print_progress(processed: int, total: int) -> None:
@@ -67,6 +73,16 @@ def create_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX idx_title_catalog_namespace_normalized
             ON title_catalog(namespace, normalized_title);
         CREATE UNIQUE INDEX idx_title_catalog_page_id ON title_catalog(page_id);
+
+        CREATE TABLE build_metadata (
+            source_filename TEXT NOT NULL,
+            source_file_size INTEGER NOT NULL,
+            source_mtime_utc TEXT NOT NULL,
+            built_at_utc TEXT NOT NULL,
+            rows_inserted INTEGER NOT NULL,
+            malformed_lines_skipped INTEGER NOT NULL,
+            elapsed_seconds REAL NOT NULL
+        );
         """
     )
 
@@ -82,8 +98,11 @@ def build_title_catalog(index_path: Path, db_path: Path, force: bool = False) ->
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     total_bytes = index_path.stat().st_size
+    source_mtime_utc = dt.datetime.fromtimestamp(index_path.stat().st_mtime, tz=dt.timezone.utc).isoformat()
+    started_at = time.perf_counter()
     processed_bytes = 0
     row_count = 0
+    malformed_lines_skipped = 0
 
     conn = sqlite3.connect(db_path)
     try:
@@ -91,6 +110,9 @@ def build_title_catalog(index_path: Path, db_path: Path, force: bool = False) ->
         batch: list[tuple[str, int, int, str, str]] = []
 
         for processed_bytes, row in iter_index_rows(index_path):
+            if row is None:
+                malformed_lines_skipped += 1
+                continue
             batch.append(row)
 
             if len(batch) >= 5000:
@@ -117,6 +139,32 @@ def build_title_catalog(index_path: Path, db_path: Path, force: bool = False) ->
             conn.commit()
             row_count += len(batch)
             print_progress(total_bytes, total_bytes)
+
+        elapsed_seconds = time.perf_counter() - started_at
+        built_at_utc = dt.datetime.now(dt.timezone.utc).isoformat()
+        conn.execute(
+            """
+            INSERT INTO build_metadata(
+                source_filename,
+                source_file_size,
+                source_mtime_utc,
+                built_at_utc,
+                rows_inserted,
+                malformed_lines_skipped,
+                elapsed_seconds
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                index_path.name,
+                total_bytes,
+                source_mtime_utc,
+                built_at_utc,
+                row_count,
+                malformed_lines_skipped,
+                elapsed_seconds,
+            ),
+        )
+        conn.commit()
 
         sys.stdout.write("\n")
         return row_count
