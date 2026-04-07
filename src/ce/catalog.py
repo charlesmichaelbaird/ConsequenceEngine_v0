@@ -68,12 +68,6 @@ def create_schema(conn: sqlite3.Connection) -> None:
             normalized_title TEXT NOT NULL
         );
 
-        CREATE INDEX idx_title_catalog_title ON title_catalog(title);
-        CREATE INDEX idx_title_catalog_normalized_title ON title_catalog(normalized_title);
-        CREATE INDEX idx_title_catalog_namespace_normalized
-            ON title_catalog(namespace, normalized_title);
-        CREATE UNIQUE INDEX idx_title_catalog_page_id ON title_catalog(page_id);
-
         CREATE TABLE build_metadata (
             source_filename TEXT NOT NULL,
             source_file_size INTEGER NOT NULL,
@@ -83,6 +77,18 @@ def create_schema(conn: sqlite3.Connection) -> None:
             malformed_lines_skipped INTEGER NOT NULL,
             elapsed_seconds REAL NOT NULL
         );
+        """
+    )
+
+
+def create_title_catalog_indexes(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE INDEX idx_title_catalog_title ON title_catalog(title);
+        CREATE INDEX idx_title_catalog_normalized_title ON title_catalog(normalized_title);
+        CREATE INDEX idx_title_catalog_namespace_normalized
+            ON title_catalog(namespace, normalized_title);
+        CREATE UNIQUE INDEX idx_title_catalog_page_id ON title_catalog(page_id);
         """
     )
 
@@ -139,6 +145,8 @@ def build_title_catalog(index_path: Path, db_path: Path, force: bool = False) ->
             conn.commit()
             row_count += len(batch)
             print_progress(total_bytes, total_bytes)
+
+        create_title_catalog_indexes(conn)
 
         elapsed_seconds = time.perf_counter() - started_at
         built_at_utc = dt.datetime.now(dt.timezone.utc).isoformat()
